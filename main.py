@@ -24,3 +24,46 @@ ModelQuestion = ModelQuestion) -> bool:
 
 def get_last_question(model: ModelQuestion = ModelQuestion) -> ModelQuestion:
     return db.session.query(model).order_by(model.id.desc()).first()
+
+
+@app.post("/questions")
+async def questions(item: Question_num):
+    last = get_last_question()
+    question_num = item.question_num
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+                f"https://jservice.io/api/random?count={question_num}"
+        ) as resp:
+            api_data = await resp.json()
+            for q in api_data:
+                while is_question_id_exists(q):
+                    print(
+                        f'id {q["id"]} with question: "{q["question"]}" '
+                        f'is already exists in database!'
+                    )
+                    async with session.get(f"https://jservice.io/api/random") as api_res:
+                        new_question = await api_res.json()
+                        q = new_question[0]
+
+                db_question = ModelQuestion(
+                    question_id=q["id"],
+                    question=q["question"],
+                    answer=q["answer"],
+                    created_at=q["created_at"],
+                )
+                db.session.add(db_question)
+            db.session.commit()
+
+    return last.question if last else []
+
+@app.get("/last_db_question")
+def last_db_question():
+    return get_last_question()
+
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
